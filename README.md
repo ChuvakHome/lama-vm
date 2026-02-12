@@ -35,7 +35,7 @@ lama-interpreter <input>
 
 Test files are placed in deps/Lama/tests folder. To run tests manually execute the following command:
 ```bash
-bash run_tests.sh
+bash run-tests.sh
 ```
 or
 ```bash
