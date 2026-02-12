@@ -230,7 +230,7 @@ actual output:
 Results of running `deps/Lama/tests/performance/Sort.lama` on different interpreters are shown in the table below:
 
 Interpreter                               | Time   
-:-----------------------------------------|:-------
-Source-level Lama recursive interpreter   | 6,93 s  
-Bytecode-level Lama recursive interpreter | 1,93 s 
-Lama iterative interpreter                | 4,36 s 
+:-----------------------------------------|:--------
+Source-level Lama recursive interpreter   | 6m 30s  
+Bytecode-level Lama recursive interpreter | 1m 56s 
+Lama iterative interpreter                | 4m 22s 
