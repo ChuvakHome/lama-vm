@@ -9,6 +9,10 @@ extern "C" {
 
     extern size_t __gc_stack_top, __gc_stack_bottom;
 
+    #ifndef _Noreturn
+    #define _Noreturn [[noreturn]]
+    #endif
+
     aint Lread ();
     aint Lwrite (aint n);
 
