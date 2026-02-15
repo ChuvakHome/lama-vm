@@ -140,21 +140,21 @@ lama::bytecode::read_bytefile_result_t lama::bytecode::readBytefileFromFile(cons
         lama::bytecode::ReadBytefileError::WrongPublicSymbolsNumber
     );
 
-    bc->public_ptr = reinterpret_cast<lama::bytecode::public_symbol_t *>(&(bc->buffer[0]));
-    bc->string_ptr = reinterpret_cast<char *>(&(bc->public_ptr[bc->public_symbols_number]));
-    bc->code_ptr = reinterpret_cast<std::byte *>(&(bc->string_ptr[bc->stringtab_size]));
     bc->global_ptr = nullptr;
 
+    bc->public_ptr = reinterpret_cast<lama::bytecode::public_symbol_t *>(bc->buffer);
     ASSERTION(
         readPublicSymbolsTable(fis, bc),
         lama::bytecode::ReadBytefileError::WrongBytecodeFileError
     );
 
+    bc->string_ptr = reinterpret_cast<char *>(bc->public_ptr + bc->public_symbols_number);
     ASSERTION(
         readStringTable(fis, bc),
         lama::bytecode::ReadBytefileError::WrongBytecodeFileError
     );
 
+    bc->code_ptr = reinterpret_cast<std::byte *>(bc->string_ptr + bc->stringtab_size);
     ASSERTION(
         readCode(fis, bc, fileSize),
         lama::bytecode::ReadBytefileError::WrongBytecodeFileError

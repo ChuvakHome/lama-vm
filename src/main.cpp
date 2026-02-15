@@ -30,10 +30,7 @@ int main(int argc, char *argv[]) {
 
     const lama::bytecode::BytecodeFile& bcf = result.getResult();
 
-    lama::interpreter::BytecodeInterpreter interpreter{&bcf};
-    interpreter.initializeGc();
-    interpreter.runInterpreterLoop();
-    interpreter.deinitializeGc();
+    lama::interpreter::interpretBytecodeFile(&bcf);
 
     return 0;
 }
