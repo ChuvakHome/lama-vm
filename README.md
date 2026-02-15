@@ -233,4 +233,4 @@ Interpreter                               | Time
 :-----------------------------------------|:--------
 Source-level Lama recursive interpreter   | 6m 30s  
 Bytecode-level Lama recursive interpreter | 1m 56s 
-Lama iterative interpreter                | 4m 22s 
+Lama iterative interpreter                | 3m 05s 
