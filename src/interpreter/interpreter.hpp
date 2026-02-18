@@ -14,8 +14,6 @@ namespace lama::interpreter {
 #define LAMA_CALL_STACK_CAPACITY 0xffff
 #endif
 
-using offset_t = std::uint32_t;
-
 constexpr std::size_t CALLSTACK_CAPACITY = LAMA_CALL_STACK_CAPACITY;
 
 class CallstackFrame final {
@@ -46,46 +44,46 @@ public:
         return frameBase_;
     }
 
-    lama::runtime::Word* getArgumentValueAddress(offset_t i) {
+    lama::runtime::Word* getArgumentValueAddress(lama::bytecode::offset_t i) {
         return getArgumentsStartAddress() + i;
     }
 
-    const lama::runtime::Word* getArgumentValueAddress(offset_t i) const {
+    const lama::runtime::Word* getArgumentValueAddress(lama::bytecode::offset_t i) const {
         return getArgumentsStartAddress() + i;
     }
 
-    void setArgumentValue(offset_t i, lama::runtime::Word value) {
+    void setArgumentValue(lama::bytecode::offset_t i, lama::runtime::Word value) {
         *getArgumentValueAddress(i) = value;
     }
 
-    lama::runtime::Word getArgumentValue(offset_t i) const {
+    lama::runtime::Word getArgumentValue(lama::bytecode::offset_t i) const {
         return *getArgumentValueAddress(i);
     }
 
-    lama::runtime::Word* getLocalValueAddress(offset_t i) {
+    lama::runtime::Word* getLocalValueAddress(lama::bytecode::offset_t i) {
         return getLocalsStartAddress() + i;
     }
 
-    const lama::runtime::Word* getLocalValueAddress(offset_t i) const {
+    const lama::runtime::Word* getLocalValueAddress(lama::bytecode::offset_t i) const {
         return getLocalsStartAddress() + i;
     }
 
-    void setLocalValue(offset_t i, lama::runtime::Word value) {
+    void setLocalValue(lama::bytecode::offset_t i, lama::runtime::Word value) {
         *getLocalValueAddress(i) = value;
     }
 
-    lama::runtime::Word getLocalValue(offset_t i) const {
+    lama::runtime::Word getLocalValue(lama::bytecode::offset_t i) const {
         return *getLocalValueAddress(i);
     }
 
-    lama::runtime::Word* getCapturedValueAddress(offset_t i);
-    const lama::runtime::Word* getCapturedValueAddress(offset_t i) const;
+    lama::runtime::Word* getCapturedValueAddress(lama::bytecode::offset_t i);
+    const lama::runtime::Word* getCapturedValueAddress(lama::bytecode::offset_t i) const;
 
-    void setCapturedValue(offset_t i, lama::runtime::Word value) {
+    void setCapturedValue(lama::bytecode::offset_t i, lama::runtime::Word value) {
         *getCapturedValueAddress(i) = value;
     }
 
-    lama::runtime::Word getCapturedValue(offset_t i) const {
+    lama::runtime::Word getCapturedValue(lama::bytecode::offset_t i) const {
         return *getCapturedValueAddress(i);
     }
 
@@ -194,11 +192,11 @@ public:
 
     }
 
-    offset_t getIp() const {
+    lama::bytecode::offset_t getIp() const {
         return ip_;
     }
 
-    offset_t getInstructionStartOffset() const {
+    lama::bytecode::offset_t getInstructionStartOffset() const {
         return instructionStartOffset_;
     }
 
@@ -208,8 +206,7 @@ public:
 
     void executeCurrentInstruction();
 protected:
-    std::byte lookupByte(offset_t pos) const {
-        // interpreterAssert(pos >= 0, "code offset must not be negative");
+    std::byte lookupByte(lama::bytecode::offset_t pos) const {
         interpreterAssert(pos < bytecodeFile_->getCodeSize(), "code offset out of range");
 
         return bytecodeFile_->getCodeByte(pos);
@@ -219,7 +216,7 @@ protected:
         return lookupByte(getIp());
     }
 
-    lama::bytecode::InstructionOpCode lookupInstrOpCode(offset_t pos) const {
+    lama::bytecode::InstructionOpCode lookupInstrOpCode(lama::bytecode::offset_t pos) const {
         return lama::bytecode::InstructionOpCode{static_cast<unsigned char>(lookupByte(pos))};
     }
 
@@ -238,10 +235,10 @@ protected:
         return lama::bytecode::InstructionOpCode{static_cast<unsigned char>(fetchByte())};
     }
 
-    std::int32_t lookupInt32(offset_t pos) const {
+    std::int32_t lookupInt32(lama::bytecode::offset_t pos) const {
         std::int32_t val;
 
-        interpreterAssert(pos + sizeof(val) < bytecodeFile_->getCodeSize(), "code offset out of range");
+        interpreterAssert(pos + sizeof(val) <= bytecodeFile_->getCodeSize(), "code offset out of range");
 
         bytecodeFile_->copyCodeBytes(static_cast<std::byte *>(static_cast<void *>(&val)), pos, sizeof(val));
 
@@ -259,7 +256,7 @@ protected:
         return val;
     }
 
-    std::string_view getString(offset_t index) const {
+    std::string_view getString(lama::bytecode::offset_t index) const {
         interpreterAssert(index < bytecodeFile_->getStringTableSize(), "string table index is out of range");
 
         return bytecodeFile_->getString(index);
@@ -377,23 +374,23 @@ protected:
         return top;
     }
 
-    lama::runtime::Word* getGlobalValueAddress(offset_t i) {
+    lama::runtime::Word* getGlobalValueAddress(lama::bytecode::offset_t i) {
         checkGlobalValueIndex(i);
 
         return getGlobalsStartAddress() + i;
     }
 
-    const lama::runtime::Word* getGlobalValueAddress(offset_t i) const {
+    const lama::runtime::Word* getGlobalValueAddress(lama::bytecode::offset_t i) const {
         checkGlobalValueIndex(i);
 
         return getGlobalsStartAddress() + i;
     }
 
-    void setGlobalValue(offset_t i, lama::runtime::Word value) {
+    void setGlobalValue(lama::bytecode::offset_t i, lama::runtime::Word value) {
         *getGlobalValueAddress(i) = value;
     }
 
-    lama::runtime::Word getGlobalValue(offset_t i) const {
+    lama::runtime::Word getGlobalValue(lama::bytecode::offset_t i) const {
         return *getGlobalValueAddress(i);
     }
 
@@ -474,23 +471,23 @@ protected:
     void executeCallBarray();
 private:
     bool gcInitialized_;
-    offset_t ip_;
-    offset_t instructionStartOffset_;
+    lama::bytecode::offset_t ip_;
+    lama::bytecode::offset_t instructionStartOffset_;
     alignas(16) DataStack stack_;
     utils::CallStack callstack_;
     bool isClosureCalled_;
     bool endReached_;
     const lama::bytecode::BytecodeFile *bytecodeFile_;
 
-    void setIp(offset_t newIp) {
+    void setIp(lama::bytecode::offset_t newIp) {
         ip_ = newIp;
     }
 
-    void advanceIp(offset_t offset = 1) {
+    void advanceIp(lama::bytecode::offset_t offset = 1) {
         ip_ += offset;
     }
 
-    void setInstructionStartOffset(offset_t offset) {
+    void setInstructionStartOffset(lama::bytecode::offset_t offset) {
         instructionStartOffset_ = offset;
     }
 
@@ -510,23 +507,23 @@ private:
         interpreterAssert(value >= 0, message);
     }
 
-    void checkCodeOffset(offset_t offset) const {
+    void checkCodeOffset(lama::bytecode::offset_t offset) const {
         interpreterAssert(offset < bytecodeFile_->getCodeSize(), "code offset out of range");
     }
 
-    void checkGlobalValueIndex(offset_t globalValueIndex) const {
+    void checkGlobalValueIndex(lama::bytecode::offset_t globalValueIndex) const {
         interpreterAssert(globalValueIndex < bytecodeFile_->getGlobalAreaSize(), "global value index out of range");
     }
 
-    void checkLocalValueIndex(CallstackFrame frame, offset_t localValueIndex) const {
+    void checkLocalValueIndex(CallstackFrame frame, lama::bytecode::offset_t localValueIndex) const {
         interpreterAssert(localValueIndex < frame.getLocalsCount(), "local value index out of range");
     }
 
-    void checkArgumentValueIndex(CallstackFrame frame, offset_t argumentValueIndex) const {
+    void checkArgumentValueIndex(CallstackFrame frame, lama::bytecode::offset_t argumentValueIndex) const {
         interpreterAssert(argumentValueIndex < frame.getArgumentsCount(), "argument value index out of range");
     }
 
-    void checkCapturedValueIndex(CallstackFrame frame, offset_t capturedValueIndex) const {
+    void checkCapturedValueIndex(CallstackFrame frame, lama::bytecode::offset_t capturedValueIndex) const {
         interpreterAssert(frame.hasCaptures(), "function cannot use captured values");
         interpreterAssert(capturedValueIndex < frame.getCapturesCount(), "captured value index out of range");
     }

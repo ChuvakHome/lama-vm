@@ -1,6 +1,7 @@
 #ifndef BYTECODE_SOURCE_FILE_HPP
 #define BYTECODE_SOURCE_FILE_HPP
 
+#include "bytecode_instructions.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -35,6 +36,8 @@ struct RawBytecodeFileDeleter {
 };
 }
 
+using offset_t = std::uint32_t;
+
 class BytecodeFile {
 public:
     BytecodeFile(std::string_view path, bytefile_t *bytefile, std::size_t codeSize);
@@ -45,11 +48,12 @@ public:
     std::string_view getFilePath() const;
 
     std::size_t getCodeSize() const;
-    std::byte getCodeByte(std::size_t offset) const;
-    std::size_t copyCodeBytes(std::byte *buffer, std::size_t offset, std::size_t nbytes) const;
+    const std::byte& getCodeByte(offset_t offset) const;
+    lama::bytecode::InstructionOpCode getInstruction(offset_t offset) const;
+    std::size_t copyCodeBytes(std::byte *buffer, offset_t offset, std::size_t nbytes) const;
 
     std::uint32_t getStringTableSize() const;
-    std::string_view getString(std::size_t offset) const;
+    std::string_view getString(offset_t offset) const;
 
     std::int32_t getGlobal(std::size_t i) const;
     std::uint32_t getGlobalAreaSize() const;
@@ -59,6 +63,8 @@ public:
     std::uint32_t getPublicSymbolsNumber() const;
 
     std::int32_t getEntryPointOffset() const;
+
+    const bytefile_t* getRawBytefile() const;
 private:
     const std::string_view path_;
     const std::size_t codeSize_;

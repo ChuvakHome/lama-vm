@@ -1,34 +1,38 @@
 
 # About
 
-Lama iterative interpreter.
+Lama utility for processing Lama bytecode files. The utility has 2 modes: iterative interpreter and idiom analyzer.
 
 # Build
 
-To build Lama iterative interpreter run the following command:
+To build the utility run the following command:
 
 ```bash
 make
 ```
 
-You can specify some compiler defines to change interpreter behaviour. 
+You can specify some compiler defines to change interpreter behaviour.
 The following defines are available:
 
 Name                      |                Description                             
 :-------------------------|:----------------------------------------------------------
 LAMA_OP_STACK_CAPACITY    | Defines capacity of operand stack of Lama interpreter     
 LAMA_CALL_STACK_CAPACITY  | Defines capacity of callstack of Lama interpreter         
-INTERPRETER_DEBUG         | Allows or prohibits debug information of Lama interpreter 
+INTERPRETER_DEBUG         | Allows or prohibits debug information of Lama interpreter
 
 Some Lama source files may require more operand stack or callstack capacity.
 
 
 # Usage
 
-So far, Lama interpreter just expects path to Lama bytecode file.
+The utility has two modes:
+- interpreter mode (default mode): iteratively interprets given bytecode file
+- idioms analyzer (enables with `-i` option): finds idioms and counts its occurrences
+
+An idiom is a sequence of one or two consecutive instructions in the given bytecode file.
 
 ```bash
-lama-interpreter <input>
+lama-util [-i] <input>
 ```
 
 # Tests
@@ -221,7 +225,7 @@ actual output:
   ```
 
   Some tests cannot be compiled due to bytecode compiler limitations.
-  
+
   **Notice**: The last one is failed but actually iterative interpreter found the same error as recursive Lama interpreter.
 </details>
 
@@ -232,5 +236,5 @@ Results of running `deps/Lama/tests/performance/Sort.lama` on different interpre
 Interpreter                               | Time   
 :-----------------------------------------|:--------
 Source-level Lama recursive interpreter   | 6m 30s  
-Bytecode-level Lama recursive interpreter | 1m 56s 
-Lama iterative interpreter                | 3m 05s 
+Bytecode-level Lama recursive interpreter | 1m 56s
+Lama iterative interpreter                | 3m 05s

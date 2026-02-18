@@ -40,11 +40,15 @@ std::string_view lama::bytecode::BytecodeFile::getFilePath() const {
     return path_;
 }
 
-std::byte lama::bytecode::BytecodeFile::getCodeByte(std::size_t offset) const {
+const std::byte& lama::bytecode::BytecodeFile::getCodeByte(offset_t offset) const {
     return bytefile_->code_ptr[offset];
 }
 
-std::size_t lama::bytecode::BytecodeFile::copyCodeBytes(std::byte *buffer, std::size_t offset, std::size_t nbytes) const {
+lama::bytecode::InstructionOpCode lama::bytecode::BytecodeFile::getInstruction(offset_t offset) const {
+    return lama::bytecode::InstructionOpCode{static_cast<unsigned char>(getCodeByte(offset))};
+}
+
+std::size_t lama::bytecode::BytecodeFile::copyCodeBytes(std::byte *buffer, offset_t offset, std::size_t nbytes) const {
     std::byte *last = std::copy_n(&(bytefile_->code_ptr[offset]), nbytes, buffer);
 
     return last - buffer;
@@ -58,7 +62,7 @@ std::uint32_t lama::bytecode::BytecodeFile::getStringTableSize() const {
     return bytefile_->stringtab_size;
 }
 
-std::string_view lama::bytecode::BytecodeFile::getString(std::size_t offset) const {
+std::string_view lama::bytecode::BytecodeFile::getString(offset_t offset) const {
     return std::string_view{&(bytefile_->string_ptr[offset])};
 }
 
@@ -84,4 +88,8 @@ std::uint32_t lama::bytecode::BytecodeFile::getPublicSymbolsNumber() const {
 
 std::int32_t lama::bytecode::BytecodeFile::getEntryPointOffset() const {
     return entryPointOffset_;
+}
+
+const lama::bytecode::bytefile_t* lama::bytecode::BytecodeFile::getRawBytefile() const {
+    return bytefile_.get();
 }

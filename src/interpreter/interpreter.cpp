@@ -2,9 +2,9 @@
 
 #include <cstdint>
 
-// #ifdef INTERPRETER_DEBUG
+#ifdef INTERPRETER_DEBUG
 #include <iostream>
-// #endif
+#endif
 
 #include "../bytecode/bytecode_instructions.hpp"
 #include "Lama/runtime/gc.h"
@@ -61,11 +61,11 @@ const lama::runtime::Word* lama::interpreter::CallstackFrame::getCapturedContent
     return reinterpret_cast<lama::runtime::Word *>(*(getArgumentsStartAddress() - 1));
 }
 
-lama::runtime::Word* lama::interpreter::CallstackFrame::getCapturedValueAddress(offset_t i) {
+lama::runtime::Word* lama::interpreter::CallstackFrame::getCapturedValueAddress(lama::bytecode::offset_t i) {
     return getCapturedContentAddress() + i + 1;
 }
 
-const lama::runtime::Word* lama::interpreter::CallstackFrame::getCapturedValueAddress(offset_t i) const {
+const lama::runtime::Word* lama::interpreter::CallstackFrame::getCapturedValueAddress(lama::bytecode::offset_t i) const {
     return getCapturedContentAddress() + i + 1;
 }
 

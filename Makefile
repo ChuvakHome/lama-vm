@@ -13,7 +13,7 @@ ifneq ($(OS_NAME), Darwin)
 LDFLAGS+=-Wl,--defsym=__start_custom_data=0 -Wl,--defsym=__stop_custom_data=0
 endif
 
-EXECUTABLE=lama-interpreter
+EXECUTABLE=lama-util
 
 SOURCES=$(shell find src -type f -name "*.cpp")
 OBJECTS=$(SOURCES:.cpp=.o)
