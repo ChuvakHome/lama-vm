@@ -1,6 +1,8 @@
 #include "idiom_analyzer.hpp"
 
 #include <algorithm>
+#include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ios>
@@ -8,12 +10,15 @@
 #include <optional>
 #include <stack>
 #include <string_view>
+#include <vector>
 
 #include "../bytecode/bytecode_instructions.hpp"
 #include "../bytecode/decoder.hpp"
 #include "../bytecode/source_file.hpp"
 
-using lama::bytecode::decoder::instruction_span_t;
+extern "C" {
+    int32_t disassemble_instruction(FILE *f, const lama::bytecode::bytefile_t *bf, uint32_t offset);
+}
 
 namespace {
     bool isJumpInstr(lama::bytecode::InstructionOpCode opcode) {
@@ -21,6 +26,12 @@ namespace {
                || opcode == lama::bytecode::InstructionOpCode::CJMPZ
                || opcode == lama::bytecode::InstructionOpCode::CJMPNZ
                || opcode == lama::bytecode::InstructionOpCode::CALL // CALLC performs jump too, but has no explicit jump address
+               ;
+    }
+
+    bool isCallInstr(lama::bytecode::InstructionOpCode opcode) {
+        return opcode == lama::bytecode::InstructionOpCode::CALL
+               || opcode == lama::bytecode::InstructionOpCode::CALLC
                ;
     }
 
@@ -42,16 +53,11 @@ namespace {
                ;
     }
 
-    int compareIdioms(const lama::bytecode::BytecodeFile *file, const instruction_span_t &span1, const instruction_span_t &span2) {
-        const std::byte * const ptr1 = &file->getCodeByte(span1.first);
-        const std::byte * const ptr2 = &file->getCodeByte(span2.first);
+    int compareIdioms(const lama::bytecode::BytecodeFile *file, const lama::idiom::idiom_record_t &r1, const lama::idiom::idiom_record_t &r2) {
+        const std::byte * const ptr1 = &file->getCodeByte(r1.first);
+        const std::byte * const ptr2 = &file->getCodeByte(r2.first);
 
-        const int cmpres = std::memcmp(ptr1, ptr2, std::min(span1.second, span2.second));
-
-        return cmpres == 0
-                ? span1.second - span2.second
-                : cmpres
-                ;
+        return std::memcmp(ptr1, ptr2, r1.second);
     }
 
     void assertCodeOffset(lama::bytecode::offset_t offset, std::size_t codeSize) {
@@ -73,11 +79,15 @@ namespace {
             std::exit(-42);
         }
     }
+
+    void checkInstruction(std::int32_t instrLen, lama::bytecode::offset_t ip) {
+        assertWithIp(instrLen >= 0, "invalid opcode", ip);
+        assertWithIp(instrLen > 0, "unexpected end of code section", ip);
+    }
 }
 
 lama::idiom::detail::IdiomAnalyzer::IdiomAnalyzer(const bytecode::BytecodeFile *file)
     : bytecodeFile_(file)
-    , preprocessed_(false)
     , reachableInstrs_(file->getCodeSize(), false) // all addresses are considered unreachable until otherwise is proven
     , labeled_(file->getCodeSize(), false) {
 
@@ -88,9 +98,13 @@ void lama::idiom::detail::IdiomAnalyzer::preprocess() {
 
     for (std::size_t i = 0; i < bytecodeFile_->getPublicSymbolsNumber(); ++i) {
         auto&&[_, offset] = bytecodeFile_->getPublicSymbol(i);
-
         assertCodeOffset(offset, bytecodeFile_->getCodeSize());
-        instructionsToProcess.push(offset);
+
+        // avoid public symbols overlapping problems
+        if (!labeled_[offset]) {
+            labeled_[offset] = true;
+            instructionsToProcess.push(offset);
+        }
     }
 
     while (!instructionsToProcess.empty()) {
@@ -102,10 +116,8 @@ void lama::idiom::detail::IdiomAnalyzer::preprocess() {
         reachableInstrs_[instrPos] = true;
         const lama::bytecode::InstructionOpCode op = bytecodeFile_->getInstruction(instrPos);
 
-        auto decodeRes = lama::bytecode::decoder::decodeInstruction(bytecodeFile_, instrPos);
-        assertWithIp(decodeRes.has_value(), "wrong instruction opcode", instrPos);
-
-        const std::size_t instrLen = decodeRes.value().second;
+        const std::int32_t instrLen = ::disassemble_instruction(stdin, bytecodeFile_->getRawBytefile(), instrPos);
+        checkInstruction(instrLen, instrPos);
 
         if (isJumpInstr(op)) {
             const std::int32_t jumpTarget = lama::bytecode::decoder::getJumpAddress(bytecodeFile_, instrPos).value();
@@ -122,21 +134,28 @@ void lama::idiom::detail::IdiomAnalyzer::preprocess() {
         if (!isTerminalInstr(op)) {
             const lama::bytecode::offset_t nextInstrPos = instrPos + instrLen;
 
-            if (nextInstrPos < bytecodeFile_->getCodeSize() && !reachableInstrs_[nextInstrPos]) {
-                reachableInstrs_[nextInstrPos] = true;
-                instructionsToProcess.push(nextInstrPos);
+            if (nextInstrPos < bytecodeFile_->getCodeSize()) {
+                if (!reachableInstrs_[nextInstrPos]) {
+                    reachableInstrs_[nextInstrPos] = true;
+                    instructionsToProcess.push(nextInstrPos);
+                }
+
+                if (isCallInstr(op)) {
+                    labeled_[nextInstrPos] = true;
+                }
             }
         }
     }
 }
 
-std::vector<instruction_span_t> lama::idiom::detail::IdiomAnalyzer::findIdioms() {
-    if (!preprocessed_) {
-        preprocess();
-        preprocessed_ = true;
-    }
+void lama::idiom::detail::IdiomAnalyzer::findIdioms(
+    std::vector<idiom_record_t> &idioms1,
+    std::vector<idiom_record_t> &idioms2
+) {
+    preprocess();
 
-    std::vector<instruction_span_t> idioms;
+    idioms1.reserve(bytecodeFile_->getCodeSize());
+    idioms2.reserve(bytecodeFile_->getCodeSize());
 
     lama::bytecode::offset_t ip = 0;
 
@@ -147,57 +166,53 @@ std::vector<instruction_span_t> lama::idiom::detail::IdiomAnalyzer::findIdioms()
         }
 
         const lama::bytecode::InstructionOpCode op = bytecodeFile_->getInstruction(ip);
+        const std::int32_t instrLen = ::disassemble_instruction(stdin, bytecodeFile_->getRawBytefile(), ip);
+        checkInstruction(instrLen, ip);
 
-        auto decodeRes = lama::bytecode::decoder::decodeInstruction(bytecodeFile_, ip);
-        assertWithIp(decodeRes.has_value(), "wrong instruction opcode", ip);
-
-        const std::size_t instrLen = decodeRes.value().second;
-
-        idioms.push_back({ip, instrLen});
+        idioms1.push_back({ip, instrLen});
 
         const lama::bytecode::offset_t nextInstrPos = ip + instrLen;
 
         if (nextInstrPos < bytecodeFile_->getCodeSize() && !isBreakingBytecodeSequenceInstr(op)) {
             if (!labeled_[nextInstrPos] && reachableInstrs_[nextInstrPos]) {
-                decodeRes = lama::bytecode::decoder::decodeInstruction(bytecodeFile_, nextInstrPos);
-                assertWithIp(decodeRes.has_value(), "wrong instruction opcode", ip);
+                const std::int32_t nextInstrLen = ::disassemble_instruction(stdin, bytecodeFile_->getRawBytefile(), nextInstrPos);
+                checkInstruction(nextInstrLen, nextInstrPos);
 
-                const std::size_t nextInstrLen = decodeRes.value().second;
-
-                idioms.push_back({ip, instrLen + nextInstrLen});
+                idioms2.push_back({ip, instrLen + nextInstrLen});
             }
         }
 
         ip += instrLen;
     }
-
-    return idioms;
 }
 
-std::vector<lama::idiom::detail::frequency_result_t> lama::idiom::detail::countFrequencies(
+void lama::idiom::detail::collectFrequencies(
     const bytecode::BytecodeFile *file,
-    std::vector<instruction_span_t> &idioms
+    std::vector<idiom_record_t> &idioms
 ) {
-    std::sort(idioms.begin(), idioms.end(), [file](const instruction_span_t &span1, const instruction_span_t &span2) {
-        return compareIdioms(file, span1, span2) < 0;
+    std::sort(idioms.begin(), idioms.end(), [file](const idiom_record_t &r1, const idiom_record_t &r2) {
+        return compareIdioms(file, r1, r2) < 0;
     });
 
-    std::vector<lama::idiom::detail::frequency_result_t> frequencies;
-    std::size_t freq = 1;
+    std::uint32_t freq = 1;
+    std::uint32_t uniqIdioms = 0;
 
-    for (std::size_t i = 1; i < idioms.size(); ++i) {
-        instruction_span_t prev = idioms[i - 1];
-        instruction_span_t curr = idioms[i];
+    for (std::uint32_t i = 1; i < idioms.size(); ++i) {
+        const std::uint32_t span1Len = idioms[i - 1].second;
+        const std::uint32_t span2Len = idioms[i].second;
 
-        if (compareIdioms(file, prev, curr) == 0) {
-            ++freq;
+        if (compareIdioms(file, { idioms[i - 1].first, span1Len }, { idioms[i].first, span2Len }) == 0) {
+            freq++;
         } else {
-            frequencies.push_back({prev, freq});
+            idioms[uniqIdioms++] = { idioms[i - 1].first, freq };
             freq = 1;
         }
     }
 
-    frequencies.push_back({idioms.back(), freq});
+    idioms[uniqIdioms++] = { idioms.back().first, freq };
+    idioms.resize(uniqIdioms);
 
-    return frequencies;
+    std::sort(idioms.begin(), idioms.end(), [](const idiom_record_t &r1, const idiom_record_t &r2){
+        return r1.second > r2.second;
+    });
 }

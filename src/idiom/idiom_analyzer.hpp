@@ -1,14 +1,14 @@
 #ifndef BYTECODE_IDIOM_ANALYZER_HPP
 #define BYTECODE_IDIOM_ANALYZER_HPP
 
-#include <algorithm>
 #include <cstdint>
 #include <vector>
 
-#include "../bytecode/decoder.hpp"
 #include "../bytecode/source_file.hpp"
 
 namespace lama::idiom {
+    using idiom_record_t = std::pair<lama::bytecode::offset_t, std::uint32_t>;
+
     namespace detail {
         class IdiomAnalyzer {
         public:
@@ -17,36 +17,64 @@ namespace lama::idiom {
             IdiomAnalyzer(IdiomAnalyzer&&) = default;
             ~IdiomAnalyzer() = default;
 
-            std::vector<lama::bytecode::decoder::instruction_span_t> findIdioms();
+            void findIdioms(std::vector<idiom_record_t> &idioms1, std::vector<idiom_record_t> &idioms2);
         private:
             const bytecode::BytecodeFile *bytecodeFile_;
-            bool preprocessed_;
             std::vector<bool> reachableInstrs_;
             std::vector<bool> labeled_;
 
             void preprocess();
         };
 
-        using frequency_result_t = std::pair<lama::bytecode::decoder::instruction_span_t, std::uint32_t>;
-        std::vector<frequency_result_t> countFrequencies(const bytecode::BytecodeFile *file, std::vector<lama::bytecode::decoder::instruction_span_t> &idioms);
+        void collectFrequencies(const bytecode::BytecodeFile *file, std::vector<idiom_record_t> &idioms);
     }
 
     template<class Func>
     void processIdiomsFrequencies(const bytecode::BytecodeFile *file, Func &&func) {
         detail::IdiomAnalyzer analyzer{file};
-        auto idioms = analyzer.findIdioms();
-        std::vector<detail::frequency_result_t> frequencies = detail::countFrequencies(file, idioms);
+        std::vector<idiom_record_t> idioms1, idioms2;
+        analyzer.findIdioms(idioms1, idioms2);
 
-        std::sort(
-            frequencies.begin(),
-            frequencies.end(),
-            [](detail::frequency_result_t r1, detail::frequency_result_t r2) {
-            return r1.second > r2.second;
-        });
+        detail::collectFrequencies(file, idioms1);
+        detail::collectFrequencies(file, idioms2);
 
-        std::for_each(frequencies.begin(), frequencies.end(), [&func](detail::frequency_result_t r) {
-            func(r.first, r.second);
-        });
+        std::size_t ptr1 = 0, ptr2 = 0;
+
+        while (ptr1 < idioms1.size() || ptr2 < idioms2.size()) {
+            std::uint32_t instrAddr;
+            std::uint32_t instrsNum;
+            std::uint32_t freq;
+
+            if (ptr1 < idioms1.size() && ptr2 < idioms2.size()) {
+                if (idioms1[ptr1].second > idioms2[ptr2].second) {
+                    instrAddr = idioms1[ptr1].first;
+                    freq = idioms1[ptr1].second;
+                    instrsNum = 1;
+
+                    ++ptr1;
+                } else {
+                    instrAddr = idioms2[ptr2].first;
+                    freq = idioms2[ptr2].second;
+                    instrsNum = 2;
+
+                    ++ptr2;
+                }
+            } else if (ptr1 < idioms1.size()) {
+                instrAddr = idioms1[ptr1].first;
+                freq = idioms1[ptr1].second;
+                instrsNum = 1;
+
+                ++ptr1;
+            } else {
+                instrAddr = idioms2[ptr2].first;
+                freq = idioms2[ptr2].second;
+                instrsNum = 2;
+
+                ++ptr2;
+            }
+
+            func({instrAddr, instrsNum}, freq);
+        }
     }
 }
 

@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <cstdio>
 #include <iostream>
 
@@ -7,23 +8,27 @@
 
 #include "interpreter/interpreter.hpp"
 
+extern "C" {
+    int32_t disassemble_instruction(FILE *f, const lama::bytecode::bytefile_t *bf, uint32_t offset);
+}
+
 namespace {
     void printUsage(std::ostream &os) {
         os << "Usage: ./lama-interpreter [bytecode-file]\n";
     }
 
-    using instr_span_t = lama::bytecode::decoder::instruction_span_t;
+    void printInstrSeq(const lama::bytecode::BytecodeFile *file, lama::idiom::idiom_record_t span) {
+        const auto [offset, instrNum] = span;
 
-    void printInstrSeq(const lama::bytecode::BytecodeFile *file, instr_span_t span) {
-        const auto [offset, instrLen] = span;
+        std::uint32_t ip = offset;
 
-        std::size_t ip = offset;
+        for (std::size_t i = 0; i < instrNum; ++i) {
+            std::cout << '\t';
 
-        while (ip < offset + instrLen) {
-            const std::size_t curInstrLen = lama::bytecode::decoder::decodeInstruction(file, ip).value().second;
-            lama::bytecode::decoder::printInstruction(stdout, file, ip);
-
+            const std::int32_t curInstrLen = ::disassemble_instruction(stdout, file->getRawBytefile(), ip);
             ip += curInstrLen;
+
+            std::cout << "; ";
         }
     }
 }
@@ -92,8 +97,8 @@ int main(int argc, char *argv[]) {
             lama::interpreter::interpretBytecodeFile(&bcf);
             break;
         case Mode::IDIOM_ANALYSIS_MODE:
-            lama::idiom::processIdiomsFrequencies(&bcf, [&bcf](const instr_span_t &span, std::uint32_t freq){
-                std::cout << freq << '\t';
+            lama::idiom::processIdiomsFrequencies(&bcf, [&bcf](const lama::idiom::idiom_record_t &span, std::uint32_t freq){
+                std::cout << freq;
                 printInstrSeq(&bcf, span);
                 std::cout << '\n';
             });

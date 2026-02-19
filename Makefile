@@ -1,7 +1,13 @@
+CC=clang
 CXX=clang++
 
 INCLUDE_DIRS=deps/
+
+CFLAGS=-std=c17 -g -O2
 CXXFLAGS=-std=c++20 -g -O2
+
+LAMA_BYTERUN_SRC=deps/Lama/byterun/byterun.c
+LAMA_BYTERUN_OBJ=$(LAMA_BYTERUN_SRC:.c=.o)
 
 LAMA_RUNTIME_DIR=deps/Lama/runtime
 LAMA_RUNTIME=$(LAMA_RUNTIME_DIR)/runtime.a
@@ -20,7 +26,7 @@ OBJECTS=$(SOURCES:.cpp=.o)
 
 all: $(EXECUTABLE)
 
-$(EXECUTABLE): $(OBJECTS) $(LAMA_RUNTIME)
+$(EXECUTABLE): $(OBJECTS) $(LAMA_BYTERUN_OBJ) $(LAMA_RUNTIME)
 	$(CXX) $(LDFLAGS) -o $@ $^
 
 .cpp.o:
@@ -28,6 +34,9 @@ $(EXECUTABLE): $(OBJECTS) $(LAMA_RUNTIME)
 
 $(LAMA_RUNTIME):
 	make -C $(LAMA_RUNTIME_DIR)
+
+$(LAMA_BYTERUN_OBJ): $(LAMA_BYTERUN_SRC)
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
 	rm -f $(OBJECTS) $(EXECUTABLE)
