@@ -2,7 +2,9 @@
 
 cd $(dirname $0)
 
-ITER_INTERPRETER=$PWD/lama-interpreter
+EXECUTABLE_NAME=lama-util
+ITER_INTERPRETER="$PWD/$EXECUTABLE_NAME"
+
 LAMA_HOME=$PWD/deps/Lama
 RUNTIME_HOME=$LAMA_HOME/runtime
 REGRESSION_TEST_DIR=$LAMA_HOME/tests/regression

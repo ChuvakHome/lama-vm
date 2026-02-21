@@ -55,6 +55,8 @@ enum class Word : native_uint_t {};
 inline native_uint_t getNativeUIntRepresentation(Word w) {
     return static_cast<native_uint_t>(w);
 }
+
+constexpr std::size_t MAIN_FUNCTION_ARGUMENTS = 2;
 }
 
 #endif

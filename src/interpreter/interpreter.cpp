@@ -1,4 +1,5 @@
 #include "interpreter.hpp"
+#include "verifier.hpp"
 
 #include <cstdint>
 
@@ -80,8 +81,6 @@ std::uint32_t lama::interpreter::CallstackFrame::getCapturesCount() const {
 namespace {
 lama::runtime::Word dataStackBuffer[lama::interpreter::OP_STACK_CAPACITY];
 
-constexpr std::size_t MAIN_FUNCTION_ARGUMENTS = 2;
-
 lama::runtime::native_uint_t getBoxedIntAsUInt(lama::runtime::native_int_t x) {
     return getNativeUIntRepresentation(lama::interpreter::runtime::Value{x}.getRawWord());
 }
@@ -122,16 +121,26 @@ enum class CaptureType : unsigned char {
     #define DO_IF_DEBUG(X)
 #endif
 
-lama::interpreter::BytecodeInterpreterState::BytecodeInterpreterState(const lama::bytecode::BytecodeFile *bytecodeFile)
+#define DO_IF_DYN_VER(X) do {\
+    if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {\
+         (X);\
+     }\
+ } while (0)
+
+lama::interpreter::BytecodeInterpreterState::BytecodeInterpreterState(
+    const lama::bytecode::BytecodeFile *bytecodeFile,
+    VerificationMode mode
+)
     : gcInitialized_(false)
     , ip_(bytecodeFile->getEntryPointOffset())
     , instructionStartOffset_(0)
-    , stack_(dataStackBuffer, bytecodeFile->getGlobalAreaSize() + MAIN_FUNCTION_ARGUMENTS + 1)
+    , mode_(mode)
+    , stack_(dataStackBuffer, bytecodeFile->getGlobalAreaSize() + lama::runtime::MAIN_FUNCTION_ARGUMENTS)
     , callstack_()
     , isClosureCalled_(false)
     , endReached_(false)
     , bytecodeFile_(bytecodeFile) {
-
+    pushValue(lama::runtime::native_uint_t{0});
 }
 
 void lama::interpreter::BytecodeInterpreterState::executeArithBinop(lama::bytecode::InstructionOpCode opcode) {
@@ -285,7 +294,7 @@ void lama::interpreter::BytecodeInterpreterState::executeSexp() {
     pushWord(lama::runtime::Word{tagHash});
 
     const std::int32_t n = fetchInt32();
-    checkNonNegative(n, "sexp members count must not be negative");
+    DO_IF_DYN_VER(checkNonNegative(n, "sexp members count must not be negative"));
     lama::runtime::native_int_t *arrayPtr = reinterpret_cast<lama::runtime::native_int_t *>(peekWordAddress(n + 1));;
 
     lama::runtime::native_uint_t boxedMembers = getBoxedIntAsUInt(n + 1);
@@ -364,10 +373,12 @@ void lama::interpreter::BytecodeInterpreterState::doReturnFromFunction() {
     const CallstackFrame currentFrame = popFrame();
 
     const lama::runtime::Word result = popWord();
-    const std::int32_t retIp = lama::interpreter::runtime::Value{*currentFrame.getFrameBase()}.getNativeInt();
 
-    popWords(std::size_t{currentFrame.getLocalsCount()});
-    popWord(); // retIp
+    while (peekWordAddress() != currentFrame.getFrameBase()) {
+        popWord();
+    }
+
+    const std::int32_t retIp = popIntValue().getNativeInt();
     popWords(std::size_t{currentFrame.getArgumentsCount()});
 
     if (currentFrame.hasClosure()) {
@@ -594,10 +605,10 @@ void lama::interpreter::BytecodeInterpreterState::executeConditionalJmpIfNotZero
 
 void lama::interpreter::BytecodeInterpreterState::executeBegin() {
     const std::int32_t argsNum = fetchInt32();
-    checkNonNegative(argsNum, "arguments number must not be negative");
+    DO_IF_DYN_VER(checkNonNegative(argsNum, "arguments number must not be negative"));
 
     const std::int32_t localsNum = fetchInt32();
-    checkNonNegative(argsNum, "locals number must not be negative");
+    DO_IF_DYN_VER(checkNonNegative(argsNum, "locals number must not be negative"));
 
     processFunctionBegin(argsNum, localsNum, false);
 
@@ -606,10 +617,10 @@ void lama::interpreter::BytecodeInterpreterState::executeBegin() {
 
 void lama::interpreter::BytecodeInterpreterState::executeClosureBegin() {
     const std::int32_t argsNum = fetchInt32();
-    checkNonNegative(argsNum, "arguments number must not be negative");
+    DO_IF_DYN_VER(checkNonNegative(argsNum, "arguments number must not be negative"));
 
     const std::int32_t localsNum = fetchInt32();
-    checkNonNegative(argsNum, "locals number must not be negative");
+    DO_IF_DYN_VER(checkNonNegative(argsNum, "locals number must not be negative"));
 
     processFunctionBegin(argsNum, localsNum, true);
 
@@ -641,7 +652,7 @@ void lama::interpreter::BytecodeInterpreterState::executeClosure() {
     checkCodeOffset(locationAddress);
 
     const std::int32_t argsNum = fetchInt32();
-    checkNonNegative(argsNum, "arguments number must not be negative");
+    DO_IF_DYN_VER(checkNonNegative(argsNum, "arguments number must not be negative"));
 
     pushWord(lama::runtime::Word(locationAddress));
 
@@ -670,6 +681,9 @@ void lama::interpreter::BytecodeInterpreterState::executeClosure() {
             case CaptureType::CAPTURE:
                 checkCapturedValueIndex(frame, index);
                 w = frame.getCapturedValue(index);
+                break;
+            default:
+                DO_IF_DYN_VER(interpreterAssert(false, "invalid varspec"));
                 break;
         }
 
@@ -722,7 +736,7 @@ void lama::interpreter::BytecodeInterpreterState::executeClosure() {
 
 void lama::interpreter::BytecodeInterpreterState::executeCallClosure() {
     const std::int32_t argsNum = fetchInt32();
-    checkNonNegative(argsNum, "arguments number must not be negative");
+    DO_IF_DYN_VER(checkNonNegative(argsNum, "arguments number must not be negative"));
 
     const lama::runtime::Word closurePtrWord = peekWord(argsNum + 1);
     const lama::runtime::native_int_t *closureContentPtr = reinterpret_cast<const lama::runtime::native_int_t *>(closurePtrWord);
@@ -747,13 +761,13 @@ void lama::interpreter::BytecodeInterpreterState::executeCall() {
     const std::int32_t locationAddress = fetchInt32();
     checkCodeOffset(locationAddress);
     lama::bytecode::InstructionOpCode startOp = lookupInstrOpCode(locationAddress);
-    interpreterAssert(
+    DO_IF_DYN_VER(interpreterAssert(
         startOp == lama::bytecode::InstructionOpCode::BEGIN,
         "CALL should go to BEGIN instruction"
-    );
+    ));
 
     const std::int32_t argsNum = fetchInt32();
-    checkNonNegative(argsNum, "arguments number must not be negative");
+    DO_IF_DYN_VER(checkNonNegative(argsNum, "arguments number must not be negative"));
 
     pushValue(lama::runtime::native_int_t{getIp()});
 
@@ -771,7 +785,7 @@ void lama::interpreter::BytecodeInterpreterState::executeTag() {
     const lama::runtime::native_int_t tagHash = ::LtagHash(const_cast<char *>(sexpTagStr.data()));
 
     const std::int32_t n = fetchInt32();
-    checkNonNegative(n, "sexp members count must not be negative");
+    DO_IF_DYN_VER(checkNonNegative(n, "sexp members count must not be negative"));
     const lama::runtime::native_uint_t boxedMembers = getBoxedIntAsUInt(n);
 
     const lama::runtime::native_uint_t ptrval = getNativeUIntRepresentation(popWord());
@@ -783,7 +797,7 @@ void lama::interpreter::BytecodeInterpreterState::executeTag() {
 
 void lama::interpreter::BytecodeInterpreterState::executeArray() {
     const std::int32_t n = fetchInt32();
-    checkNonNegative(n, "array length must not be negative");
+    DO_IF_DYN_VER(checkNonNegative(n, "array length must not be negative"));
 
     const lama::interpreter::runtime::Value boxedLenVal = lama::runtime::native_int_t{n};
 
@@ -799,11 +813,11 @@ void lama::interpreter::BytecodeInterpreterState::executeArray() {
 
 void lama::interpreter::BytecodeInterpreterState::executeFail() {
     const std::int32_t lineNum = fetchInt32();
-    interpreterAssert(lineNum >= 1, "line number must be greater than zero");
+    DO_IF_DYN_VER(interpreterAssert(lineNum >= 1, "line number must be greater than zero"));
     const lama::runtime::native_uint_t boxedLineNum = getBoxedIntAsUInt(lineNum);
 
     const std::int32_t colNum = fetchInt32();
-    interpreterAssert(colNum >= 1, "column number must be greater than zero");
+    DO_IF_DYN_VER(interpreterAssert(colNum >= 1, "column number must be greater than zero"));
     const lama::runtime::native_uint_t boxedColNum = getBoxedIntAsUInt(colNum);
 
     const lama::runtime::native_uint_t value = getNativeUIntRepresentation(popWord());
@@ -1104,15 +1118,27 @@ void lama::interpreter::BytecodeInterpreterState::executeCurrentInstruction() {
             executeCallBarray();
             break;
         default:
-            interpreterAssert(false, "Invalid instruction");
+            DO_IF_DYN_VER(interpreterAssert(false, "invalid instruction"));
             break;
     }
 }
 
-void lama::interpreter::interpretBytecodeFile(const bytecode::BytecodeFile *file) {
+void lama::interpreter::interpretBytecodeFile(
+    const bytecode::BytecodeFile *file,
+    VerificationMode mode
+) {
     ::__init();
 
-    BytecodeInterpreterState state{file};
+    /*
+     * A verifier tries statically check the bytecode file.
+     * If verifier meets problematic instructions (e. g. STA), verification won't be finished.
+     * As a result, interpreter will use dynamic verification
+     */
+    if (mode == VerificationMode::STATIC_VERIFICATION && !lama::verifier::verifyBytecodeFile(file)) {
+        mode = VerificationMode::DYNAMIC_VERIFICATION;
+    }
+
+    BytecodeInterpreterState state{file, mode};
 
     while (!state.isEndReached()) {
         state.executeCurrentInstruction();

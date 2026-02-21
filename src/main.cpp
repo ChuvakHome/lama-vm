@@ -14,7 +14,7 @@ extern "C" {
 
 namespace {
     void printUsage(std::ostream &os) {
-        os << "Usage: ./lama-interpreter [bytecode-file]\n";
+        os << "Usage: ./lama-interpreter [-s | -i] [bytecode-file]\n";
     }
 
     void printInstrSeq(const lama::bytecode::BytecodeFile *file, lama::idiom::idiom_record_t span) {
@@ -52,6 +52,8 @@ int main(int argc, char *argv[]) {
     };
 
     Mode mode = Mode::INTERPRETER_MODE;
+    lama::interpreter::VerificationMode verMode = lama::interpreter::VerificationMode::DYNAMIC_VERIFICATION;
+
     std::size_t fileArgIndex = 1;
 
     while (fileArgIndex < argc) {
@@ -60,6 +62,8 @@ int main(int argc, char *argv[]) {
         if (arg[0] == '-') {
             if (arg[1] == 'i' && arg[2] == '\0') {
                 mode = Mode::IDIOM_ANALYSIS_MODE;
+            } else if (arg[1] == 's' && arg[2] == '\0') {
+                verMode = lama::interpreter::VerificationMode::STATIC_VERIFICATION;
             } else {
                 std::cerr << "Unknown option: " << arg << '\n';
                 printUsage(std::cerr);
@@ -94,7 +98,7 @@ int main(int argc, char *argv[]) {
 
     switch (mode) {
         case Mode::INTERPRETER_MODE:
-            lama::interpreter::interpretBytecodeFile(&bcf);
+            lama::interpreter::interpretBytecodeFile(&bcf, verMode);
             break;
         case Mode::IDIOM_ANALYSIS_MODE:
             lama::idiom::processIdiomsFrequencies(&bcf, [&bcf](const lama::idiom::idiom_record_t &span, std::uint32_t freq){

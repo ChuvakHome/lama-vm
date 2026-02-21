@@ -26,24 +26,35 @@ Some Lama source files may require more operand stack or callstack capacity.
 # Usage
 
 The utility has two modes:
-- interpreter mode (default mode): iteratively interprets given bytecode file
+- interpreter mode with runtime checks (default mode): iteratively interprets given bytecode file
+- interpreter mode with static checks (enables with `-s` option): similar to the previous one, except for static verification of the given bytecode file before interpretation
 - idioms analyzer (enables with `-i` option): finds idioms and counts its occurrences
 
 An idiom is a sequence of one or two consecutive instructions in the given bytecode file.
 
 ```bash
-lama-util [-i] <input>
+lama-util [-s | -i] <input>
 ```
 
 # Tests
 
 Test files are placed in deps/Lama/tests folder. To run tests manually execute the following command:
+- without bytecode verification:
 ```bash
-bash run-tests.sh
+bash run-tests-dyn-verif.sh
 ```
 or
 ```bash
-./run_tests.sh
+./run_tests-dyn-verif.sh
+```
+
+- with bytecode verification:
+```bash
+bash run-tests-static-verif.sh
+```
+or
+```bash
+./run_tests-static-verif.sh
 ```
 
 ## Regression tests
@@ -233,8 +244,9 @@ actual output:
 
 Results of running `deps/Lama/tests/performance/Sort.lama` on different interpreters are shown in the table below:
 
-Interpreter                               | Time   
-:-----------------------------------------|:--------
-Source-level Lama recursive interpreter   | 6m 30s  
-Bytecode-level Lama recursive interpreter | 1m 56s
-Lama iterative interpreter                | 3m 05s
+Interpreter                                 | Time   
+:-------------------------------------------|:--------
+Source-level Lama recursive interpreter     | 6m 30s  
+Bytecode-level Lama recursive interpreter   | 1m 56s
+Lama iterative interpreter (dynamic checks) | 3m 05s
+Lama iterative interpreter (static checks)  | 2m 47s

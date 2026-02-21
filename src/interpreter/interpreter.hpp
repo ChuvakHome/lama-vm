@@ -184,9 +184,17 @@ constexpr std::size_t OP_STACK_CAPACITY = LAMA_OP_STACK_CAPACITY;
 extern template class lama::interpreter::runtime::GcDataStack<lama::runtime::Word, OP_STACK_CAPACITY>;
 using DataStack = lama::interpreter::runtime::GcDataStack<lama::runtime::Word, OP_STACK_CAPACITY>;
 
+enum class VerificationMode {
+    STATIC_VERIFICATION,
+    DYNAMIC_VERIFICATION,
+};
+
 class BytecodeInterpreterState {
 public:
-    BytecodeInterpreterState(const lama::bytecode::BytecodeFile *bytecodeFile);
+    BytecodeInterpreterState(
+        const lama::bytecode::BytecodeFile *bytecodeFile,
+        VerificationMode mode = VerificationMode::DYNAMIC_VERIFICATION
+    );
 
     ~BytecodeInterpreterState() {
 
@@ -207,7 +215,9 @@ public:
     void executeCurrentInstruction();
 protected:
     std::byte lookupByte(lama::bytecode::offset_t pos) const {
-        interpreterAssert(pos < bytecodeFile_->getCodeSize(), "code offset out of range");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(pos < bytecodeFile_->getCodeSize(), "code offset out of range");
+        }
 
         return bytecodeFile_->getCodeByte(pos);
     }
@@ -238,7 +248,9 @@ protected:
     std::int32_t lookupInt32(lama::bytecode::offset_t pos) const {
         std::int32_t val;
 
-        interpreterAssert(pos + sizeof(val) <= bytecodeFile_->getCodeSize(), "code offset out of range");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(pos + sizeof(val) <= bytecodeFile_->getCodeSize(), "code offset out of range");
+        }
 
         bytecodeFile_->copyCodeBytes(static_cast<std::byte *>(static_cast<void *>(&val)), pos, sizeof(val));
 
@@ -257,43 +269,57 @@ protected:
     }
 
     std::string_view getString(lama::bytecode::offset_t index) const {
-        interpreterAssert(index < bytecodeFile_->getStringTableSize(), "string table index is out of range");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(index < bytecodeFile_->getStringTableSize(), "string table index is out of range");
+        }
 
         return bytecodeFile_->getString(index);
     }
 
     void pushWord(lama::runtime::Word w) {
-        interpreterAssert(stack_.size() < stack_.capacity, "Operand stack exhausted");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(stack_.size() < stack_.capacity, "operand stack exhausted");
+        }
 
         return stack_.push(w);
     }
 
     lama::runtime::Word peekWord(std::size_t offset = 1) const {
-        interpreterAssert(stack_.size() >= offset, "Operand stack index overflow while peeking Lama Word");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(stack_.size() >= offset, "operand stack index overflow while peeking Lama Word");
+        }
 
         return stack_.peek(offset);
     }
 
     lama::runtime::Word *peekWordAddress(std::size_t offset = 1) {
-        interpreterAssert(stack_.size() >= offset, "Operand stack index overflow while peeking Lama Word addr");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(stack_.size() >= offset, "operand stack index overflow while peeking Lama Word addr");
+        }
 
         return stack_.peekAddress(offset);
     }
 
     const lama::runtime::Word *peekWordAddress(std::size_t offset = 1) const {
-        interpreterAssert(stack_.size() >= offset, "Operand stack index overflow while peeking Lama Word addr");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(stack_.size() >= offset, "operand stack index overflow while peeking Lama Word addr");
+        }
 
         return stack_.peekAddress(offset);
     }
 
     lama::interpreter::runtime::Value peekValue(std::size_t offset = 1) const {
-        interpreterAssert(stack_.size() >= offset, "Operand stack index overflow while peeking Lama Value");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(stack_.size() >= offset, "operand stack index overflow while peeking Lama Value");
+        }
 
         return lama::interpreter::runtime::Value{peekWord(offset)};
     }
 
     lama::runtime::Word popWord() {
-        interpreterAssert(stack_.nonEmpty(), "Operand stack is empty");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(stack_.nonEmpty(), "operand stack is empty");
+        }
 
         return stack_.pop();
     }
@@ -473,6 +499,7 @@ private:
     bool gcInitialized_;
     lama::bytecode::offset_t ip_;
     lama::bytecode::offset_t instructionStartOffset_;
+    VerificationMode mode_;
     alignas(16) DataStack stack_;
     utils::CallStack callstack_;
     bool isClosureCalled_;
@@ -508,19 +535,27 @@ private:
     }
 
     void checkCodeOffset(lama::bytecode::offset_t offset) const {
-        interpreterAssert(offset < bytecodeFile_->getCodeSize(), "code offset out of range");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(offset < bytecodeFile_->getCodeSize(), "code offset out of range");
+        }
     }
 
     void checkGlobalValueIndex(lama::bytecode::offset_t globalValueIndex) const {
-        interpreterAssert(globalValueIndex < bytecodeFile_->getGlobalAreaSize(), "global value index out of range");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(globalValueIndex < bytecodeFile_->getGlobalAreaSize(), "global value index out of range");
+        }
     }
 
     void checkLocalValueIndex(CallstackFrame frame, lama::bytecode::offset_t localValueIndex) const {
-        interpreterAssert(localValueIndex < frame.getLocalsCount(), "local value index out of range");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(localValueIndex < frame.getLocalsCount(), "local value index out of range");
+        }
     }
 
     void checkArgumentValueIndex(CallstackFrame frame, lama::bytecode::offset_t argumentValueIndex) const {
-        interpreterAssert(argumentValueIndex < frame.getArgumentsCount(), "argument value index out of range");
+        if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
+            interpreterAssert(argumentValueIndex < frame.getArgumentsCount(), "argument value index out of range");
+        }
     }
 
     void checkCapturedValueIndex(CallstackFrame frame, lama::bytecode::offset_t capturedValueIndex) const {
@@ -531,7 +566,7 @@ private:
     void doReturnFromFunction();
 };
 
-void interpretBytecodeFile(const bytecode::BytecodeFile *file);
+void interpretBytecodeFile(const bytecode::BytecodeFile *file, VerificationMode mode = VerificationMode::DYNAMIC_VERIFICATION);
 }
 
 #endif
