@@ -368,6 +368,8 @@ void lama::verifier::BytecodeVerifier::verifyFail() {
     checkMin(lineNumber, 1, "line number should be greater than 0");
     checkMin(colNumber, 1, "column number should be greater than 0");
 
+    popWord();
+
     saveStackSizeInfo(
         currentState_.functionBegin + sizeof(bytecode::InstructionOpCode) + sizeof(std::uint32_t),
         currentState_.maxStackSize,
