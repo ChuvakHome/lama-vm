@@ -1,6 +1,7 @@
 #ifndef INTERPRETER_VERIFIER_HPP
 #define INTERPRETER_VERIFIER_HPP
 
+#include <cstdint>
 #include <vector>
 
 #include "interpreter.hpp"
@@ -10,11 +11,13 @@
 
 namespace lama::verifier {
 struct VerifierAbstractState {
-    std::size_t argsCount;
+    lama::bytecode::offset_t functionBegin;
+    std::uint16_t argsCount;
     lama::bytecode::offset_t startIp;
-    std::size_t localsCount;
-    std::size_t stackSize;
-    std::size_t callstackSize;
+    std::uint16_t localsCount;
+    std::uint16_t stackSize;
+    std::uint16_t maxStackSize;
+    std::uint16_t callstackSize;
 };
 
 class StackSize {
@@ -50,7 +53,7 @@ private:
 
 class BytecodeVerifier {
 public:
-    BytecodeVerifier(const lama::bytecode::BytecodeFile *bytecodeFile);
+    BytecodeVerifier(lama::bytecode::BytecodeFile *bytecodeFile);
 
     bool verifyBytecode();
     bool verifyInstruction();
@@ -218,7 +221,7 @@ private:
     VerifierAbstractState currentState_;
     std::vector<VerifierAbstractState> worklist_;
     bool pushNextState_;
-    const lama::bytecode::BytecodeFile *bytecodeFile_;
+    lama::bytecode::BytecodeFile *bytecodeFile_;
 
     void setIp(lama::bytecode::offset_t newIp) {
         ip_ = newIp;
@@ -231,6 +234,8 @@ private:
     void setInstructionStartOffset(lama::bytecode::offset_t offset) {
         instructionStartOffset_ = offset;
     }
+
+    void saveStackSizeInfo(bytecode::offset_t offset, std::uint16_t stackSize, std::uint16_t localsNum);
 
     void checkGlobalValueIndex(lama::bytecode::offset_t globalValueIndex) const {
         verifierAssert(globalValueIndex < bytecodeFile_->getGlobalAreaSize(), "global value index out of range");
@@ -292,7 +297,7 @@ private:
     }
 };
 
-bool verifyBytecodeFile(const bytecode::BytecodeFile *file);
+bool verifyBytecodeFile(bytecode::BytecodeFile *file);
 }
 
 #endif

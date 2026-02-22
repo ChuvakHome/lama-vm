@@ -13,20 +13,50 @@ namespace {
     };
 }
 
-lama::verifier::BytecodeVerifier::BytecodeVerifier(const lama::bytecode::BytecodeFile *bytecodeFile)
+lama::verifier::BytecodeVerifier::BytecodeVerifier(lama::bytecode::BytecodeFile *bytecodeFile)
     : ip_(0)
     , instructionStartOffset_(0)
     , currentState_({
+        /* functionBegin = */ static_cast<lama::bytecode::offset_t>(bytecodeFile->getEntryPointOffset()),
         /* argsCount = */ lama::runtime::MAIN_FUNCTION_ARGUMENTS,
         /* startIp = */ static_cast<lama::bytecode::offset_t>(bytecodeFile->getEntryPointOffset()),
         /* localsCount = */ 0,
         /* stackSize = */ 0,
+        /* maxStackSize = */ 0,
         /* callstackSize = */ 1
     })
     , stackSizes_(bytecodeFile->getCodeSize())
     , pushNextState_(true)
     , bytecodeFile_(bytecodeFile) {
     worklist_.push_back(currentState_);
+}
+
+void lama::verifier::BytecodeVerifier::saveStackSizeInfo(
+    lama::bytecode::offset_t offset,
+    std::uint16_t stackSize,
+    std::uint16_t localsNum
+) {
+    verifierAssert(offset + sizeof(std::int32_t) <= bytecodeFile_->getCodeSize(), "offset to save stack size out of bounds");
+
+    std::uint32_t oldval;
+    bytecodeFile_->copyCodeBytes(
+        reinterpret_cast<std::byte *>(&oldval),
+        offset,
+        sizeof(oldval)
+    );
+
+    const std::uint16_t oldStackSize = (oldval >> 16) & 0xfff;
+
+    if (oldval >= stackSize) {
+        return;
+    }
+
+    const std::uint32_t val = static_cast<std::uint32_t>(stackSize) << 16 | localsNum;
+    bytecodeFile_->writeBytes(
+        reinterpret_cast<const std::byte *>(&val),
+        offset,
+        sizeof(val)
+    );
 }
 
 void lama::verifier::BytecodeVerifier::verifyBinop() {
@@ -70,10 +100,12 @@ void lama::verifier::BytecodeVerifier::verifyJmp() {
     setIp(newIp);
 
     pushState({
+        /* functionBegin = */ currentState_.functionBegin,
         /* argsCount = */ currentState_.argsCount,
         /* startIp = */ newIp,
         /* localsCount = */ currentState_.localsCount,
         /* stackSize = */ currentState_.stackSize,
+        /* maxStackSize = */ currentState_.maxStackSize,
         /* callstackSize = */ currentState_.callstackSize
     });
 
@@ -81,7 +113,15 @@ void lama::verifier::BytecodeVerifier::verifyJmp() {
 }
 
 void lama::verifier::BytecodeVerifier::verifyReturn() {
+    verifierAssert(currentState_.stackSize == 1, "one word expected to be present at the operand stack frame");
+
     popFrame();
+
+    saveStackSizeInfo(
+        currentState_.functionBegin + sizeof(bytecode::InstructionOpCode) + sizeof(std::uint32_t),
+        currentState_.maxStackSize,
+        currentState_.localsCount
+    );
 
     pushNextState_ = false;
 }
@@ -172,18 +212,22 @@ void lama::verifier::BytecodeVerifier::verifyConditionalJmp() {
     popWord();
 
     pushState({
+        /* functionBegin = */ currentState_.functionBegin,
         /* argsCount = */ currentState_.argsCount,
         /* startIp = */ newIp,
         /* localsCount = */ currentState_.localsCount,
         /* stackSize = */ currentState_.stackSize,
+        /* maxStackSize = */ currentState_.maxStackSize,
         /* callstackSize = */ currentState_.callstackSize
     });
 
     pushState({
+        /* functionBegin = */ currentState_.functionBegin,
         /* argsCount = */ currentState_.argsCount,
         /* startIp = */ getIp(),
         /* localsCount = */ currentState_.localsCount,
         /* stackSize = */ currentState_.stackSize,
+        /* maxStackSize = */ currentState_.maxStackSize,
         /* callstackSize = */ currentState_.callstackSize
     });
 
@@ -195,7 +239,12 @@ void lama::verifier::BytecodeVerifier::verifyBegin() {
     checkArgumentsNumber(argsNum);
     verifierAssert(argsNum == currentState_.argsCount, "the number of passed arguments differs from the number declared in BEGIN");
 
-    const std::int32_t localsNum = fetchInt32();
+    /*
+     * Despite the 4 bytes for the local vars number, the verifier will save (localsNum & 0xffff) in
+     * the 2 lower bytes of second parameter of BEGIN instruction. There will be only 2 bytes
+     * left for number of local vars
+     */
+    const std::int16_t localsNum = fetchInt32();
     checkLocalsNumber(localsNum);
 
     currentState_.localsCount = localsNum;
@@ -206,7 +255,12 @@ void lama::verifier::BytecodeVerifier::verifyClosureBegin() {
     checkArgumentsNumber(argsNum);
     verifierAssert(argsNum == currentState_.argsCount, "the number of passed arguments differs from the number declared in CBEGIN");
 
-    const std::int32_t localsNum = fetchInt32();
+    /*
+     * Despite the 4 bytes for the local vars number, the verifier will save (localsNum & 0xffff) in
+     * the 2 lower bytes of second parameter of CBEGIN instruction. There will be only 2 bytes
+     * left for number of local vars
+     */
+    const std::int16_t localsNum = fetchInt32();
     checkLocalsNumber(localsNum);
 
     currentState_.localsCount = localsNum;
@@ -267,17 +321,21 @@ void lama::verifier::BytecodeVerifier::verifyCall() {
     checkArgumentsNumber(argsNum);
 
     pushState({
-        /* argsCount = */ static_cast<std::size_t>(argsNum),
+        /* functionBegin = */ locationAddress,
+        /* argsCount = */ static_cast<std::uint16_t>(argsNum),
         /* startIp = */ locationAddress,
         /* localsCount = */ 0,
         /* stackSize = */ 0,
-        /* callstackSize = */ currentState_.callstackSize + 1,
+        /* maxStackSize = */ 0,
+        /* callstackSize = */ static_cast<uint16_t>(currentState_.callstackSize + 1),
     });
     pushState({
+        /* functionBegin = */ currentState_.functionBegin,
         /* argsCount = */ currentState_.argsCount,
         /* startIp = */ getIp(),
         /* localsCount = */ currentState_.localsCount,
-        /* stackSize = */ currentState_.stackSize - argsNum + 1,
+        /* stackSize = */ static_cast<uint16_t>(currentState_.stackSize - argsNum + 1),
+        /* maxStackSize = */ currentState_.maxStackSize,
         /* callstackSize = */ currentState_.callstackSize
     });
 
@@ -309,6 +367,12 @@ void lama::verifier::BytecodeVerifier::verifyFail() {
 
     checkMin(lineNumber, 1, "line number should be greater than 0");
     checkMin(colNumber, 1, "column number should be greater than 0");
+
+    saveStackSizeInfo(
+        currentState_.functionBegin + sizeof(bytecode::InstructionOpCode) + sizeof(std::uint32_t),
+        currentState_.maxStackSize,
+        currentState_.localsCount
+    );
 
     pushNextState_ = false;
 }
@@ -369,6 +433,8 @@ bool lama::verifier::BytecodeVerifier::verifyInstruction() {
 
     setIp(currentState_.startIp);
     setInstructionStartOffset(getIp());
+
+    currentState_.maxStackSize = std::max(currentState_.stackSize, currentState_.maxStackSize);
 
     if (stackSizes_.at(getInstructionStartOffset()).isDefined()) {
         verifierAssert(
@@ -526,18 +592,20 @@ bool lama::verifier::BytecodeVerifier::verifyInstruction() {
 
     if (pushNextState_) {
         pushState({
+            /* functionBegin = */ currentState_.functionBegin,
             /* argsCount = */ currentState_.argsCount,
             /* startIp = */ getIp(),
             /* localsCount = */ currentState_.localsCount,
             /* stackSize = */ currentState_.stackSize,
-            /* callstackSize = */ currentState_.callstackSize
+            /* maxStackSize = */ currentState_.maxStackSize,
+            /* callstackSize = */ currentState_.callstackSize,
         });
     }
 
     return true;
 }
 
-bool lama::verifier::verifyBytecodeFile(const lama::bytecode::BytecodeFile *file) {
+bool lama::verifier::verifyBytecodeFile(lama::bytecode::BytecodeFile *file) {
     lama::verifier::BytecodeVerifier verifier{file};
 
     return verifier.verifyBytecode();

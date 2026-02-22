@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
         return static_cast<int>(result.getError());
     }
 
-    const lama::bytecode::BytecodeFile& bcf = result.getResult();
+    lama::bytecode::BytecodeFile& bcf = result.getResult();
 
     switch (mode) {
         case Mode::INTERPRETER_MODE:

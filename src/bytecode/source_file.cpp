@@ -48,6 +48,13 @@ lama::bytecode::InstructionOpCode lama::bytecode::BytecodeFile::getInstruction(o
     return lama::bytecode::InstructionOpCode{static_cast<unsigned char>(getCodeByte(offset))};
 }
 
+std::size_t lama::bytecode::BytecodeFile::writeBytes(const std::byte *buffer, offset_t offset, std::size_t nbytes) {
+    std::byte * const start = &(bytefile_->code_ptr[offset]);
+    std::byte *last = std::copy_n(buffer, nbytes, start);
+
+    return last - start;
+}
+
 std::size_t lama::bytecode::BytecodeFile::copyCodeBytes(std::byte *buffer, offset_t offset, std::size_t nbytes) const {
     std::byte *last = std::copy_n(&(bytefile_->code_ptr[offset]), nbytes, buffer);
 

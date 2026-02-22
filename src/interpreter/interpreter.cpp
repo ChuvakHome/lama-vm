@@ -124,7 +124,7 @@ enum class CaptureType : unsigned char {
 #define DO_IF_DYN_VER(X) do {\
     if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {\
          (X);\
-     }\
+    }\
  } while (0)
 
 lama::interpreter::BytecodeInterpreterState::BytecodeInterpreterState(
@@ -607,8 +607,15 @@ void lama::interpreter::BytecodeInterpreterState::executeBegin() {
     const std::int32_t argsNum = fetchInt32();
     DO_IF_DYN_VER(checkNonNegative(argsNum, "arguments number must not be negative"));
 
-    const std::int32_t localsNum = fetchInt32();
-    DO_IF_DYN_VER(checkNonNegative(argsNum, "locals number must not be negative"));
+    const std::int32_t val = fetchInt32();
+
+    const std::int16_t localsNum = val & 0xffff;
+    DO_IF_DYN_VER(checkNonNegative(localsNum, "locals number must not be negative"));
+
+    if (mode_ == lama::interpreter::VerificationMode::STATIC_VERIFICATION) {
+        const std::uint16_t frameStackSize = (static_cast<std::uint32_t>(val) >> 16) & 0xffff;
+        checkStackOverflow(stack_.size() + localsNum + frameStackSize);
+    }
 
     processFunctionBegin(argsNum, localsNum, false);
 
@@ -619,8 +626,14 @@ void lama::interpreter::BytecodeInterpreterState::executeClosureBegin() {
     const std::int32_t argsNum = fetchInt32();
     DO_IF_DYN_VER(checkNonNegative(argsNum, "arguments number must not be negative"));
 
-    const std::int32_t localsNum = fetchInt32();
-    DO_IF_DYN_VER(checkNonNegative(argsNum, "locals number must not be negative"));
+    const std::int32_t val = fetchInt32();
+    const std::int16_t localsNum = val & 0xffff;
+    DO_IF_DYN_VER(checkNonNegative(localsNum, "locals number must not be negative"));
+
+    if (mode_ == lama::interpreter::VerificationMode::STATIC_VERIFICATION) {
+        const std::uint16_t frameStackSize = (static_cast<std::uint32_t>(val) >> 16) & 0xffff;
+        checkStackOverflow(stack_.size() + localsNum + frameStackSize);
+    }
 
     processFunctionBegin(argsNum, localsNum, true);
 
@@ -1123,16 +1136,16 @@ void lama::interpreter::BytecodeInterpreterState::executeCurrentInstruction() {
     }
 }
 
-void lama::interpreter::interpretBytecodeFile(
-    const bytecode::BytecodeFile *file,
-    VerificationMode mode
-) {
+void lama::interpreter::interpretBytecodeFile(bytecode::BytecodeFile *file, VerificationMode mode) {
     ::__init();
 
     /*
      * A verifier tries statically check the bytecode file.
-     * If verifier meets problematic instructions (e. g. STA), verification won't be finished.
-     * As a result, interpreter will use dynamic verification
+     * If verifier meets problematic instructions (e.g. STA), verification won't be finished.
+     * Incomplete static verification is not an obstacle, we can enable dynamic checks.
+     * Even though the verifier may have changed some bytes, interpretation will work as usual,
+     * a number of local variables will be read from 2 lower bytes of second parameter of
+     * [C]BEGIN bytecode instruction
      */
     if (mode == VerificationMode::STATIC_VERIFICATION && !lama::verifier::verifyBytecodeFile(file)) {
         mode = VerificationMode::DYNAMIC_VERIFICATION;

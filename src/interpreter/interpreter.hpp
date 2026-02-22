@@ -1,6 +1,7 @@
 #ifndef INTERPRETER_INTERPRETER_HPP
 #define INTERPRETER_INTERPRETER_HPP
 
+#include <cstddef>
 #include <cstdint>
 
 #include "../bytecode/source_file.hpp"
@@ -278,7 +279,7 @@ protected:
 
     void pushWord(lama::runtime::Word w) {
         if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
-            interpreterAssert(stack_.size() < stack_.capacity, "operand stack exhausted");
+            checkStackOverflow(stack_.size());
         }
 
         return stack_.push(w);
@@ -534,6 +535,10 @@ private:
         interpreterAssert(value >= 0, message);
     }
 
+    void checkStackOverflow(std::size_t stackSize) const {
+        interpreterAssert(stackSize < stack_.capacity, "operand stack exhausted");
+    }
+
     void checkCodeOffset(lama::bytecode::offset_t offset) const {
         if (mode_ == VerificationMode::DYNAMIC_VERIFICATION) {
             interpreterAssert(offset < bytecodeFile_->getCodeSize(), "code offset out of range");
@@ -566,7 +571,7 @@ private:
     void doReturnFromFunction();
 };
 
-void interpretBytecodeFile(const bytecode::BytecodeFile *file, VerificationMode mode = VerificationMode::DYNAMIC_VERIFICATION);
+void interpretBytecodeFile(bytecode::BytecodeFile *file, VerificationMode mode = VerificationMode::DYNAMIC_VERIFICATION);
 }
 
 #endif

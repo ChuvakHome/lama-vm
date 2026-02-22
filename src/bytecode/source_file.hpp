@@ -50,6 +50,8 @@ public:
     std::size_t getCodeSize() const;
     const std::byte& getCodeByte(offset_t offset) const;
     lama::bytecode::InstructionOpCode getInstruction(offset_t offset) const;
+
+    std::size_t writeBytes(const std::byte *buffer, offset_t offset, std::size_t nbytes);
     std::size_t copyCodeBytes(std::byte *buffer, offset_t offset, std::size_t nbytes) const;
 
     std::uint32_t getStringTableSize() const;
